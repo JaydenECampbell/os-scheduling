@@ -127,6 +127,8 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     // Repeat until all processes in terminated state:
     //   - *Get process at front of ready queue
     //   - IF READY QUEUE WAS NOT EMPTY
+    if (!shared_data->ready_queue.empty())
+    {
     //    - Wait context switching load time
     //    - Simulate the processes running (i.e. sleep for short bits, e.g. 5 ms, and call the processes `updateProcess()` method)
     //      until one of the following:
@@ -137,9 +139,14 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
     //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
     //   - Wait context switching save time
+    }
+
+    else
+    {
     //  - IF READY QUEUE WAS EMPTY
     //   - Wait short bit (i.e. sleep 5 ms)
     //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
+    }
 }
 
 void printProcessOutput(std::vector<Process*>& processes)
