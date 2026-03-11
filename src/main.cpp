@@ -5,15 +5,13 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
-#include <condition_variable>
-#include <unistd.h>
+#include <ncurses.h>
 #include "configreader.h"
 #include "process.h"
 
 // Shared data for all cores
 typedef struct SchedulerData {
-    std::mutex mutex;
-    std::condition_variable condition;
+    std::mutex queue_mutex;
     ScheduleAlgorithm algorithm;
     uint32_t context_switch;
     uint32_t time_slice;
@@ -22,12 +20,12 @@ typedef struct SchedulerData {
 } SchedulerData;
 
 void coreRunProcesses(uint8_t core_id, SchedulerData *data);
-int printProcessOutput(std::vector<Process*>& processes, std::mutex& mutex);
-void clearOutput(int num_lines);
+void printProcessOutput(std::vector<Process*>& processes);
+std::string makeProgressString(double percent, uint32_t width);
 uint64_t currentTime();
 std::string processStateToString(Process::State state);
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
     // Ensure user entered a command line parameter for configuration file name
     if (argc < 2)
@@ -38,15 +36,16 @@ int main(int argc, char **argv)
 
     // Declare variables used throughout main
     int i;
-    SchedulerData *shared_data;
+    SchedulerData *shared_data = new SchedulerData();
     std::vector<Process*> processes;
 
     // Read configuration file for scheduling simulation
-    SchedulerConfig *config = readConfigFile(argv[1]);
+    SchedulerConfig *config = scr::readConfigFile(argv[1]);
+
+    // Store number of cores in local variable for future access
+    uint8_t num_cores = config->cores;
 
     // Store configuration parameters in shared data object
-    uint8_t num_cores = config->cores;
-    shared_data = new SchedulerData();
     shared_data->algorithm = config->algorithm;
     shared_data->context_switch = config->context_switch;
     shared_data->time_slice = config->time_slice;
@@ -66,7 +65,7 @@ int main(int argc, char **argv)
     }
 
     // Free configuration data from memory
-    deleteConfig(config);
+    scr::deleteConfig(config);
 
     // Launch 1 scheduling thread per cpu core
     std::thread *schedule_threads = new std::thread[num_cores];
@@ -76,26 +75,26 @@ int main(int argc, char **argv)
     }
 
     // Main thread work goes here
-    int num_lines = 0;
+    initscr();
     while (!(shared_data->all_terminated))
     {
-        // Clear output from previous iteration
-        clearOutput(num_lines);
-
         // Do the following:
         //   - Get current time
         //   - *Check if any processes need to move from NotStarted to Ready (based on elapsed time), and if so put that process in the ready queue
         //   - *Check if any processes have finished their I/O burst, and if so put that process back in the ready queue
         //   - *Check if any running process need to be interrupted (RR time slice expires or newly ready process has higher priority)
-        //   - *Sort the ready queue (if needed - based on scheduling algorithm)
+        //     - NOTE: ensure processes are inserted into the ready queue at the proper position based on algorithm
         //   - Determine if all processes are in the terminated state
         //   - * = accesses shared data (ready queue), so be sure to use proper synchronization
 
-        // output process status table
-        num_lines = printProcessOutput(processes, shared_data->mutex);
+        // Maybe simply print progress bar for all procs?
+        printProcessOutput(processes);
 
         // sleep 50 ms
-        usleep(50000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // clear outout
+        erase();
     }
 
 
@@ -105,7 +104,7 @@ int main(int argc, char **argv)
         schedule_threads[i].join();
     }
 
-    // print final statistics
+    // print final statistics (use `printw()` for each print, and `refresh()` after all prints)
     //  - CPU utilization
     //  - Throughput
     //     - Average for first 50% of processes finished
@@ -117,6 +116,7 @@ int main(int argc, char **argv)
 
     // Clean up before quitting program
     processes.clear();
+    endwin();
 
     return 0;
 }
@@ -126,25 +126,27 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
     //   - *Get process at front of ready queue
-    //   - Simulate the processes running until one of the following:
-    //     - CPU burst time has elapsed
-    //     - Interrupted (RR time slice has elapsed or process preempted by higher priority process)
-    //  - Place the process back in the appropriate queue
-    //     - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
-    //     - Terminated if CPU burst finished and no more bursts remain -- no actual queue, simply set state to Terminated
-    //     - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
-    //  - Wait context switching time
+    //   - IF READY QUEUE WAS NOT EMPTY
+    //    - Wait context switching load time
+    //    - Simulate the processes running (i.e. sleep for short bits, e.g. 5 ms, and call the processes `updateProcess()` method)
+    //      until one of the following:
+    //      - CPU burst time has elapsed
+    //      - Interrupted (RR time slice has elapsed or process preempted by higher priority process)
+    //   - Place the process back in the appropriate queue
+    //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
+    //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
+    //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
+    //   - Wait context switching save time
+    //  - IF READY QUEUE WAS EMPTY
+    //   - Wait short bit (i.e. sleep 5 ms)
     //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
 }
 
-int printProcessOutput(std::vector<Process*>& processes, std::mutex& mutex)
+void printProcessOutput(std::vector<Process*>& processes)
 {
-    int i;
-    int num_lines = 2;
-    std::lock_guard<std::mutex> lock(mutex);
-    printf("|   PID | Priority |      State | Core | Turn Time | Wait Time | CPU Time | Remain Time |\n");
-    printf("+-------+----------+------------+------+-----------+-----------+----------+-------------+\n");
-    for (i = 0; i < processes.size(); i++)
+    printw("|   PID | Priority |    State    | Core |               Progress               |\n"); // 36 chars for prog
+    printw("+-------+----------+-------------+------+--------------------------------------+\n");
+    for (int i = 0; i < processes.size(); i++)
     {
         if (processes[i]->getState() != Process::State::NotStarted)
         {
@@ -153,28 +155,22 @@ int printProcessOutput(std::vector<Process*>& processes, std::mutex& mutex)
             std::string process_state = processStateToString(processes[i]->getState());
             int8_t core = processes[i]->getCpuCore();
             std::string cpu_core = (core >= 0) ? std::to_string(core) : "--";
-            double turn_time = processes[i]->getTurnaroundTime();
-            double wait_time = processes[i]->getWaitTime();
-            double cpu_time = processes[i]->getCpuTime();
-            double remain_time = processes[i]->getRemainingTime();
-            printf("| %5u | %8u | %10s | %4s | %9.1lf | %9.1lf | %8.1lf | %11.1lf |\n", 
-                   pid, priority, process_state.c_str(), cpu_core.c_str(), turn_time, 
-                   wait_time, cpu_time, remain_time);
-            num_lines++;
+            double total_time = processes[i]->getTotalRunTime();
+            double completed_time = total_time - processes[i]->getRemainingTime();
+            std::string progress = makeProgressString(completed_time / total_time, 36);
+            printw("| %5u | %8u | %11s | %4s | %36s |\n", pid, priority,
+                   process_state.c_str(), cpu_core.c_str(), progress.c_str());
         }
     }
-    return num_lines;
+    refresh();
 }
 
-void clearOutput(int num_lines)
+std::string makeProgressString(double percent, uint32_t width)
 {
-    int i;
-    for (i = 0; i < num_lines; i++)
-    {
-        fputs("\033[A\033[2K", stdout);
-    }
-    rewind(stdout);
-    fflush(stdout);
+    uint32_t n_chars = percent * width;
+    std::string progress_bar(n_chars, '#');
+    progress_bar.resize(width, ' ');
+    return progress_bar;
 }
 
 uint64_t currentTime()
