@@ -127,25 +127,51 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     // Repeat until all processes in terminated state:
     //   - *Get process at front of ready queue
     //   - IF READY QUEUE WAS NOT EMPTY
-    if (!shared_data->ready_queue.empty())
+    if (!shared_data->all_terminated)
     {
+        Process* proc = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
+            if (!shared_data->ready_queue.empty())
+            {
+                proc = shared_data->ready_queue.front();
+                shared_data->ready_queue.pop_front();
+            }
+        }
+
+        if (proc != nullptr)
+        {
     //    - Wait context switching load time
+            std::this_thread::sleep_for(std::chrono::milliseconds(shared_data->context_switch));
+
     //    - Simulate the processes running (i.e. sleep for short bits, e.g. 5 ms, and call the processes `updateProcess()` method)
     //      until one of the following:
     //      - CPU burst time has elapsed
     //      - Interrupted (RR time slice has elapsed or process preempted by higher priority process)
+
+            uint64_t start = currentTime();
+            proc->setCpuCore(core_id);
+            proc->setState(Process::State::Running, start);
+            proc->setBurstStartTime(start);
+            proc->interruptHandled();
+        
+
     //   - Place the process back in the appropriate queue
     //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
     //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
     //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
-    //   - Wait context switching save time
-    }
 
-    else
-    {
+    //   - Wait context switching save time
+            std::this_thread::sleep_for(std::chrono::milliseconds(shared_data->context_switch));
+        }
+
     //  - IF READY QUEUE WAS EMPTY
-    //   - Wait short bit (i.e. sleep 5 ms)
-    //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
+        else
+        {
+            //   - Wait short bit (i.e. sleep 5 ms)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
+        }
     }
 }
 
