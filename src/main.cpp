@@ -86,6 +86,7 @@ int main(int argc, char *argv[])
         //     - NOTE: ensure processes are inserted into the ready queue at the proper position based on algorithm
         //   - Determine if all processes are in the terminated state
         //   - * = accesses shared data (ready queue), so be sure to use proper synchronization
+        uint64_t ct = currentTime();
 
         // Maybe simply print progress bar for all procs?
         printProcessOutput(processes);
@@ -125,10 +126,10 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
+    //   - *Get process at front of ready queue
+    //   - IF READY QUEUE WAS NOT EMPTY
     if (!shared_data->all_terminated)
     {
-    
-    //   - *Get process at front of ready queue
         Process* proc = nullptr;
         {
             std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
@@ -138,8 +139,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                 shared_data->ready_queue.pop_front();
             }
         }
-        
-    //   - IF READY QUEUE WAS NOT EMPTY
+
         if (proc != nullptr)
         {
     //    - Wait context switching load time
