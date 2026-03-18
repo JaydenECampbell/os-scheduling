@@ -125,10 +125,10 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
-    //   - *Get process at front of ready queue
-    //   - IF READY QUEUE WAS NOT EMPTY
     if (!shared_data->all_terminated)
     {
+    
+    //   - *Get process at front of ready queue
         Process* proc = nullptr;
         {
             std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
@@ -138,7 +138,8 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                 shared_data->ready_queue.pop_front();
             }
         }
-
+        
+    //   - IF READY QUEUE WAS NOT EMPTY
         if (proc != nullptr)
         {
     //    - Wait context switching load time
