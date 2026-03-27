@@ -91,6 +91,16 @@ double Process::getTotalRunTime() const
 {
     return (double)total_time / 1000.0;
 }
+//I added the three methods below here - Jack
+int8_t Process::getBurstIndex() const{
+    return current_burst;
+}
+bool Process::burstTimeExpired(u_int64_t time) const{
+    return time-burst_start_time > burst_times[current_burst];
+}
+uint64_t Process::getBurstTimeAtIndex(u_int8_t index) const{
+    return burst_times[index];
+}
 
 double Process::getRemainingTime() const
 {
