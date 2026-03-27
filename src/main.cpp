@@ -125,7 +125,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
-    if (!shared_data->all_terminated)
+    while (!shared_data->all_terminated)
     {
     
     //   - *Get process at front of ready queue
@@ -156,30 +156,31 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             proc->setBurstStartTime(start);
             proc->interruptHandled();
 
-            uint64_t startSlice = start;
+            int startburst = proc->getCurrentBurst();
             while(true)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 uint64_t now = currentTime();
-                proc->updateProcess(currentTime());
+                proc->updateProcess(now);
                 //   - Place the process back in the appropriate queue
 
                 // If CPU burst time has elapsed
                     //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
                     //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
-                if (proc->getRemainingTime() <= 0)
+                if (proc->getCurrentBurst() != startburst)
                 {
                     proc->setCpuCore(-1);
 
-                    // If no more bursts → terminate
-                    if (proc->getRemainingTime() <= 0)
+                    // If no more bursts, terminate
+                    if (proc->getCurrentBurst() >= proc->getNumBursts())
                     {
                         proc->setState(Process::State::Terminated, now);
                     }
                     else
                     {
                         proc->setState(Process::State::IO, now);
-                    }
+                        proc->setBurstStartTime(now);
+                    }   
                     break;
                 }
 

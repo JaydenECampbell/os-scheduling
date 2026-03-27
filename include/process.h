@@ -52,6 +52,9 @@ public:
 
     void updateProcess(uint64_t current_time);
     void updateBurstTime(int burst_idx, uint32_t new_time);
+
+    int getCurrentBurst() const;
+    int getNumBursts() const;
 };
 
 #endif // __PROCESS_H_

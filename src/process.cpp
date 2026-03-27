@@ -97,6 +97,16 @@ double Process::getRemainingTime() const
     return (double)remain_time / 1000.0;
 }
 
+int Process::getCurrentBurst() const
+{
+    return current_burst;
+}
+
+int Process::getNumBursts() const
+{
+    return num_bursts;
+}
+
 void Process::setBurstStartTime(uint64_t current_time)
 {
     burst_start_time = current_time;
@@ -131,9 +141,9 @@ void Process::updateProcess(uint64_t current_time)
     // use `current_time` to update turnaround time, wait time, burst times, 
     // cpu time, and remaining time
 
-    uint64_t time_elapsed = current_time - burst_start_time;    // Time passed since last update
+    uint64_t timeElapsed = current_time - burst_start_time;    // Time passed since last update
 
-    if (time_elapsed == 0)  // No time has passed, no update
+    if (timeElapsed == 0)  // No time has passed, no update
     {
         return;
     }
@@ -141,15 +151,63 @@ void Process::updateProcess(uint64_t current_time)
     switch (state)
     {
         case State::Ready:
+        {
+            wait_time += timeElapsed;
+            break;
+        }
 
         case State::Running:
+        {
+            if (timeElapsed >= burst_times[current_burst])  // Burst finished
+            {
+                uint32_t elpasedBuffer = burst_times[current_burst];
+
+                cpu_time += elpasedBuffer;
+                remain_time -= elpasedBuffer;
+                burst_times[current_burst] = 0;
+                current_burst++;
+            }
+
+            else  // Burst still running
+            {
+                burst_times[current_burst] -= timeElapsed;
+                cpu_time += timeElapsed;
+                remain_time -= timeElapsed;
+            }
+
+            break;
+        }
 
         case State::IO:
+        {
+            if (timeElapsed >= burst_times[current_burst])  // Burst finished
+            {
+                burst_times[current_burst] = 0;
+                current_burst++;
+            }
 
-        case State::NotStarted:
-        
-        case State::Terminated:
+            else  // Burst still running
+            {
+                burst_times[current_burst] -= timeElapsed;
+            }
+
+            break;
+        }
+
+        case State::NotStarted: // Do nothing
+
+        case State::Terminated: // Do nothing
+
+        default:
+            break;
     }
+
+    if (state != State::NotStarted) // Updates turnaround time
+    {
+        turn_time = current_time - launch_time;
+    }
+
+    burst_start_time = current_time;  // Update burst start time for next update
 }
 
 void Process::updateBurstTime(int burst_idx, uint32_t new_time)
