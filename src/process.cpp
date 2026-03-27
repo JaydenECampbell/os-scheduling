@@ -89,7 +89,7 @@ double Process::getCpuTime() const
 
 double Process::getTotalRunTime() const
 {
-    return (double)remain_time / 1000.0;
+    return (double)total_time / 1000.0;
 }
 
 double Process::getRemainingTime() const
@@ -143,7 +143,7 @@ void Process::updateProcess(uint64_t current_time)
 
     uint64_t timeElapsed = current_time - burst_start_time;    // Time passed since last update
 
-    if (timeElapsed == 0)  // No time has passed, no update
+    if (timeElapsed == 0 || current_burst >= num_bursts)  // No time has passed, no update, also current burst OOB handler (shouldn't happen, but just in case)
     {
         return;
     }
