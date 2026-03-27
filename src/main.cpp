@@ -86,7 +86,128 @@ int main(int argc, char *argv[])
         //     - NOTE: ensure processes are inserted into the ready queue at the proper position based on algorithm
         //   - Determine if all processes are in the terminated state
         //   - * = accesses shared data (ready queue), so be sure to use proper synchronization
+        {
+        std::mutex mtx;
+        // Do the following:
+        //   - Get current time
+        //   - *Check if any processes need to move from NotStarted to Ready (based on elapsed time), and if so put that process in the ready queue
+        //   - *Check if any processes have finished their I/O burst, and if so put that process back in the ready queue
+        //   - *Check if any running process need to be interrupted (RR time slice expires or newly ready process has higher priority)
+        //     - NOTE: ensure processes are inserted into the ready queue at the proper position based on algorithm
+        //   - Determine if all processes are in the terminated state
+        //   - * = accesses shared data (ready queue), so be sure to use proper synchronization
+        uint64_t ct = currentTime();
+        mtx.lock();
+        for(int i = 0; i < processes.size(); i++){
+            if(processes[i]->getTurnaroundTime() > processes[i]->getStartTime()){
 
+                processes[i]->setState(Process::State::Ready, ct);
+                
+                if(shared_data->algorithm == ScheduleAlgorithm::SJF){
+                    std::list<Process*>::iterator itr;
+                    bool foundOne = false;
+                    for(itr = shared_data->ready_queue.begin(); itr != shared_data->ready_queue.end(); itr++){
+                        if((**itr).getRemainingTime() > processes[i]->getRemainingTime()){
+                            shared_data->ready_queue.insert(itr, processes[i]);
+                            foundOne = true;
+                            break;
+                        }
+                    }
+                    if(!foundOne){
+                        shared_data->ready_queue.push_back(processes[i]);
+                    }
+                }
+                else if(shared_data->algorithm == ScheduleAlgorithm::PP){
+                    std::list<Process*>::iterator itr;
+                    bool foundOne = false;
+                    for(itr = shared_data->ready_queue.begin(); itr != shared_data->ready_queue.end(); itr++){
+                        if((**itr).getPriority() > processes[i]->getPriority()){
+                            shared_data->ready_queue.insert(itr, processes[i]);
+                            foundOne = true;
+                            break;
+                        }
+                    }
+                    if(!foundOne){
+                        shared_data->ready_queue.push_back(processes[i]);
+                    }
+                }
+                else{
+                    shared_data->ready_queue.push_back(processes[i]);
+                }
+            }
+        }
+        mtx.unlock();
+        mtx.lock();
+        for(int i = 0; i < processes.size(); i++){
+            if(processes[i]->getState() == Process::State::IO){
+                if(ct-processes[i]->getBurstStartTime() > processes[i]->getBurstTimeAtIndex(processes[i]->getBurstIndex())){
+
+                    processes[i]->setState(Process::State::Ready, ct);
+
+                    if(shared_data->algorithm == ScheduleAlgorithm::SJF){
+                        std::list<Process*>::iterator itr;
+                        bool foundOne = false;
+                        for(itr = shared_data->ready_queue.begin(); itr != shared_data->ready_queue.end(); itr++){
+                            if((**itr).getRemainingTime() > processes[i]->getRemainingTime()){
+                                shared_data->ready_queue.insert(itr, processes[i]);
+                                foundOne = true;
+                                break;
+                            }
+                        }
+                        if(!foundOne){
+                        shared_data->ready_queue.push_back(processes[i]);
+                        }
+                    }
+                    else if(shared_data->algorithm == ScheduleAlgorithm::PP){
+                        std::list<Process*>::iterator itr;
+                        bool foundOne = false;
+                        for(itr = shared_data->ready_queue.begin(); itr != shared_data->ready_queue.end(); itr++){
+                            if((**itr).getPriority() > processes[i]->getPriority()){
+                                shared_data->ready_queue.insert(itr, processes[i]);
+                                foundOne = true;
+                                break;
+                            }
+                        }
+                        if(!foundOne){
+                        shared_data->ready_queue.push_back(processes[i]);
+                        }
+                    }
+                    else{
+                        shared_data->ready_queue.push_back(processes[i]);
+                    }
+                }
+            }
+        }
+        mtx.unlock();
+        mtx.lock();
+        for(int i = 0; i < processes.size(); i++){
+            if(shared_data->algorithm == ScheduleAlgorithm::RR){
+                if(processes[i]->getState() == Process::State::Running){
+                    if(processes[i]->burstTimeExpired(ct)){
+                        processes[i]->updateBurstTime(processes[i]->getBurstIndex(), processes[i]->getBurstTimeAtIndex(processes[i]->getBurstIndex()) - (ct-processes[i]->getBurstStartTime()));
+                        processes[i]->interrupt();
+                    }
+                }
+            }
+            else if(shared_data->algorithm == ScheduleAlgorithm::PP){
+                if(processes[i]->getState() == Process::State::Running){
+                    if(shared_data->ready_queue.front()->getPriority() > processes[i]->getPriority()){
+                        processes[i]->interrupt();
+                    }
+                }
+            }
+        }
+        mtx.unlock();
+        mtx.lock();
+        shared_data->all_terminated = true;
+        for(int i = 0; i < processes.size(); i++){
+            if(processes[i]->getState() != Process::State::Terminated){
+                shared_data->all_terminated = false;
+                break;
+            }
+        }
+        mtx.unlock();
+        
         // Maybe simply print progress bar for all procs?
         printProcessOutput(processes);
 
@@ -112,7 +233,38 @@ int main(int argc, char *argv[])
     //     - Overall average
     //  - Average turnaround time
     //  - Average waiting time
+    uint64_t end = currentTime();
 
+    uint32_t utilization = 0;
+    for(int i = 0; i < processes.size(); i++){
+        utilization += processes[i]->getTotalRunTime();
+    }
+    utilization /= end-start;
+    printw("CPU Utilization: " + utilization);
+
+    uint32_t timeHalfOfProccessesFinished = 0;
+    std::vector<u_int32_t> tempList;
+    for(int i = 0; i < processes.size(); i++){
+        tempList.push_back(processes[i]->getTurnaroundTime());
+    }
+    std::sort(tempList.begin(), tempList.end());
+    timeHalfOfProccessesFinished = tempList[processes.size()/2];
+    printw("\nAverage Throughput for first half of processes finished: " + (timeHalfOfProccessesFinished-start)/processes.size());
+    printw("\nAverage Throughput for second half of processes finished: " + (end-timeHalfOfProccessesFinished)/processes.size());
+    printw("\nCPU Throughput Overall: " + (end-start)/processes.size());
+
+    uint32_t turn = 0;
+    for(int i = 0; i < processes.size(); i++){
+        turn += processes[i]->getTurnaroundTime();
+    }
+    printw("\nAverage Turnaround Time: " + turn/processes.size());
+
+    u_int32_t waiting = 0;
+    for(int i = 0; i < processes.size(); i++){
+        waiting += processes[i]->getWaitTime();
+    }
+    printw("\nAverage Waiting Time" + waiting/processes.size());
+    refresh();
 
     // Clean up before quitting program
     processes.clear();
