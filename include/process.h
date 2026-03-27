@@ -43,6 +43,10 @@ public:
     double getCpuTime() const;
     double getRemainingTime() const;
     double getTotalRunTime() const;
+    //I added the three below - Jack
+    int8_t getBurstIndex() const;
+    bool burstTimeExpired(uint64_t time) const;
+    uint64_t getBurstTimeAtIndex(u_int8_t index) const;
 
     void setBurstStartTime(uint64_t current_time);
     void setState(State new_state, uint64_t current_time);
