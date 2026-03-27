@@ -86,7 +86,6 @@ int main(int argc, char *argv[])
         //     - NOTE: ensure processes are inserted into the ready queue at the proper position based on algorithm
         //   - Determine if all processes are in the terminated state
         //   - * = accesses shared data (ready queue), so be sure to use proper synchronization
-        uint64_t ct = currentTime();
 
         // Maybe simply print progress bar for all procs?
         printProcessOutput(processes);
@@ -126,10 +125,10 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
-    //   - *Get process at front of ready queue
-    //   - IF READY QUEUE WAS NOT EMPTY
     if (!shared_data->all_terminated)
     {
+    
+    //   - *Get process at front of ready queue
         Process* proc = nullptr;
         {
             std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
@@ -161,19 +160,35 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             while(true)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                uint64_t now = currentTime();
                 proc->updateProcess(currentTime());
+                //   - Place the process back in the appropriate queue
 
                 // If CPU burst time has elapsed
+                    //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
+                    //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
+                if (proc->getRemainingTime() <= 0)
+                {
+                    proc->setCpuCore(-1);
+
+                    // If no more bursts → terminate
+                    if (proc->getRemainingTime() <= 0)
+                    {
+                        proc->setState(Process::State::Terminated, now);
+                    }
+                    else
+                    {
+                        proc->setState(Process::State::IO, now);
+                    }
+                    break;
+                }
 
                 // If RR time slice has elapsed
 
                 // If process preempted by higher priority process
-            }
+                    //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
 
-    //   - Place the process back in the appropriate queue
-    //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
-    //      - Terminated if CPU burst finished and no more bursts remain -- set state to Terminated
-    //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
+            }
 
     //   - Wait context switching save time
             std::this_thread::sleep_for(std::chrono::milliseconds(shared_data->context_switch));
