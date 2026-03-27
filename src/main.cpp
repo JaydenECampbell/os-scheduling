@@ -157,6 +157,8 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             proc->interruptHandled();
 
             int startburst = proc->getCurrentBurst();
+            uint64_t startSlice = start;
+
             while(true)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -176,19 +178,40 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                     {
                         proc->setState(Process::State::Terminated, now);
                     }
+
                     else
                     {
                         proc->setState(Process::State::IO, now);
                         proc->setBurstStartTime(now);
-                    }   
+                    }
+
                     break;
                 }
 
                 // If RR time slice has elapsed
+                if (shared_data->algorithm == ScheduleAlgorithm::RR)
+                {
+                    if (now - startSlice >= shared_data->time_slice)
+                    {
+                        proc->interrupt();
+                    }
+                }
 
                 // If process preempted by higher priority process
                     //      - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
+                if (proc->isInterrupted())
+                {
+                    proc->setCpuCore(-1);
+                    proc->setState(Process::State::Ready, now);
+                    proc->setBurstStartTime(now);
+                    {
+                        std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
+                        shared_data->ready_queue.push_back(proc);
+                    }
 
+                    proc->interruptHandled();
+                    break;
+                }
             }
 
     //   - Wait context switching save time
