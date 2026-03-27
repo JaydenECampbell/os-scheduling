@@ -130,6 +130,26 @@ void Process::updateProcess(uint64_t current_time)
 {
     // use `current_time` to update turnaround time, wait time, burst times, 
     // cpu time, and remaining time
+
+    uint64_t time_elapsed = current_time - burst_start_time;    // Time passed since last update
+
+    if (time_elapsed == 0)  // No time has passed, no update
+    {
+        return;
+    }
+
+    switch (state)
+    {
+        case State::Ready:
+
+        case State::Running:
+
+        case State::IO:
+
+        case State::NotStarted:
+        
+        case State::Terminated:
+    }
 }
 
 void Process::updateBurstTime(int burst_idx, uint32_t new_time)
