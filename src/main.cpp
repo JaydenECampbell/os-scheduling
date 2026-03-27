@@ -138,7 +138,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                 shared_data->ready_queue.pop_front();
             }
         }
-        
+
     //   - IF READY QUEUE WAS NOT EMPTY
         if (proc != nullptr)
         {
@@ -155,7 +155,19 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             proc->setState(Process::State::Running, start);
             proc->setBurstStartTime(start);
             proc->interruptHandled();
-        
+
+            uint64_t startSlice = start;
+            while(true)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                proc->updateProcess(currentTime());
+
+                // If CPU burst time has elapsed
+
+                // If RR time slice has elapsed
+
+                // If process preempted by higher priority process
+            }
 
     //   - Place the process back in the appropriate queue
     //      - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
