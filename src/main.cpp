@@ -250,6 +250,7 @@ int main(int argc, char *argv[])
     //     - Overall average
     //  - Average turnaround time
     //  - Average waiting time
+    erase();
     uint64_t end = currentTime();
 
     double utilization = 0;
@@ -280,10 +281,11 @@ int main(int argc, char *argv[])
         waiting += processes[i]->getWaitTime();
     }
     printw("\nAverage Waiting Time: %.2f\n", waiting/processes.size());
-    refresh();
+    //refresh();
 
     // Clean up before quitting program
     processes.clear();
+    getch();
     endwin();
 
     return 0;
