@@ -168,17 +168,18 @@ void Process::updateProcess(uint64_t current_time)
 
         case State::Running:
         {
-            if (timeElapsed >= burst_times[current_burst])  // Burst finished
+            if (timeElapsed >= burst_times[current_burst])  // Burst finishes
             {
-                uint32_t elpasedBuffer = burst_times[current_burst];
+                uint32_t elapsed = burst_times[current_burst];
 
-                cpu_time += elpasedBuffer;
-                remain_time -= elpasedBuffer;
+                cpu_time += elapsed;
+                remain_time -= elapsed;
+
                 burst_times[current_burst] = 0;
                 current_burst++;
             }
 
-            else  // Burst still running
+            else    // Burst still going
             {
                 burst_times[current_burst] -= timeElapsed;
                 cpu_time += timeElapsed;
@@ -190,17 +191,6 @@ void Process::updateProcess(uint64_t current_time)
 
         case State::IO:
         {
-            if (timeElapsed >= burst_times[current_burst])  // Burst finished
-            {
-                burst_times[current_burst] = 0;
-                current_burst++;
-            }
-
-            else  // Burst still running
-            {
-                burst_times[current_burst] -= timeElapsed;
-            }
-
             break;
         }
 
@@ -217,7 +207,7 @@ void Process::updateProcess(uint64_t current_time)
         turn_time = current_time - launch_time;
     }
 
-    burst_start_time = current_time;  // Update burst start time for next update
+    burst_start_time = current_time;
 }
 
 void Process::updateBurstTime(int burst_idx, uint32_t new_time)
